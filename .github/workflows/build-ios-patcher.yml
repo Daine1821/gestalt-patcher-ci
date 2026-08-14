@@ -107,6 +107,7 @@ jobs:
             -framework Foundation \
             -framework IOKit \
             -framework CoreFoundation \
+            -ldl \
             -o product_set \
             product_set.m
           file product_set

@@ -52,6 +52,7 @@ if [[ "$TARGET" == "product_set" || "$TARGET" == "all" || "$TARGET" == "both" ]]
     -framework Foundation \
     -framework IOKit \
     -framework CoreFoundation \
+    -ldl \
     -o product_set \
     product_set.m
   file product_set

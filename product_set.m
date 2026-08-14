@@ -4,14 +4,18 @@
  * mobileactivationd 26.5 reads via IORegistryEntryFromPath + IORegistryEntryCreateCFProperty.
  * Lab: run from ramdisk BEFORE normal boot to inject CFData ints on :product.
  *
- * CI: gestalt-patcher-ci (.github/workflows/build-ios-patcher.yml)
+ * Note: IORegistryEntrySetCFProperties is SDK-unavailable on iOS — resolved via dlsym at runtime.
  */
 #import <Foundation/Foundation.h>
 #import <IOKit/IOKitLib.h>
+#import <dlfcn.h>
 #import <stdint.h>
 #import <stdio.h>
 #import <stdlib.h>
 #import <string.h>
+
+typedef kern_return_t (*IORegistryEntrySetCFProperties_fn)(
+    io_registry_entry_t entry, CFTypeRef properties);
 
 static const char *PRODUCT_PATH = ":/product";
 
@@ -25,10 +29,17 @@ static const struct {
     {"effective-security-mode-sep", 0},
 };
 
+static IORegistryEntrySetCFProperties_fn load_set_cf_properties(void) {
+    void *sym = dlsym(RTLD_DEFAULT, "IORegistryEntrySetCFProperties");
+    if (!sym) {
+        fprintf(stderr, "dlsym IORegistryEntrySetCFProperties: %s\n", dlerror());
+    }
+    return (IORegistryEntrySetCFProperties_fn)sym;
+}
+
 static io_registry_entry_t open_product(void) {
     io_registry_entry_t product = IORegistryEntryFromPath(kIOMainPortDefault, PRODUCT_PATH);
     if (!product) {
-        /* fallback path form seen in some builds */
         product = IORegistryEntryFromPath(kIOMainPortDefault, "IODeviceTree:/product");
     }
     if (!product) {
@@ -66,7 +77,14 @@ static void print_property(const char *key, CFTypeRef val) {
         CFNumberGetValue((CFNumberRef)val, kCFNumberIntType, &n);
         printf("  %s = CFNumber(%d)\n", key, n);
     } else {
-        printf("  %s = %s\n", key, CFCopyDescription(val));
+        CFStringRef desc = CFCopyDescription(val);
+        char buf[256];
+        if (desc && CFStringGetCString(desc, buf, sizeof(buf), kCFStringEncodingUTF8)) {
+            printf("  %s = %s\n", key, buf);
+        } else {
+            printf("  %s = (cf object)\n", key);
+        }
+        if (desc) CFRelease(desc);
     }
 }
 
@@ -89,6 +107,9 @@ static int cmd_read(void) {
 }
 
 static int cmd_set(void) {
+    IORegistryEntrySetCFProperties_fn set_props = load_set_cf_properties();
+    if (!set_props) return 1;
+
     io_registry_entry_t product = open_product();
     if (!product) return 1;
 
@@ -106,7 +127,7 @@ static int cmd_set(void) {
         CFRelease(data);
     }
 
-    kern_return_t kr = IORegistryEntrySetCFProperties(product, props);
+    kern_return_t kr = set_props(product, props);
     CFRelease(props);
     printf("[set] IORegistryEntrySetCFProperties kr=0x%x\n", kr);
 
