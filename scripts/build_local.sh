@@ -3,13 +3,15 @@
 set -euo pipefail
 IOS_MIN="${1:-15.0}"
 TARGET="${2:-both}"
+MACH_ARCH="${3:-arm64e}"
 SDK="$(xcrun --sdk iphoneos --show-sdk-path)"
 
-echo "SDK=$SDK IOS_MIN=$IOS_MIN TARGET=$TARGET"
+echo "SDK=$SDK IOS_MIN=$IOS_MIN TARGET=$TARGET MACH_ARCH=$MACH_ARCH"
 
 if [[ "$TARGET" == "gestaltpatcher" || "$TARGET" == "both" ]]; then
   xcrun clang \
-    -target "arm64-apple-ios${IOS_MIN}" \
+    -target "${MACH_ARCH}-apple-ios${IOS_MIN}" \
+    -arch "${MACH_ARCH}" \
     -isysroot "$SDK" \
     -mios-version-min="${IOS_MIN}" \
     -fobjc-arc \
@@ -20,8 +22,10 @@ if [[ "$TARGET" == "gestaltpatcher" || "$TARGET" == "both" ]]; then
 fi
 
 if [[ "$TARGET" == "iokit_spoof" || "$TARGET" == "both" ]]; then
+  # Always arm64e for mobileactivationd injection
   xcrun clang \
-    -target "arm64-apple-ios${IOS_MIN}" \
+    -target "arm64e-apple-ios${IOS_MIN}" \
+    -arch arm64e \
     -isysroot "$SDK" \
     -mios-version-min="${IOS_MIN}" \
     -dynamiclib \

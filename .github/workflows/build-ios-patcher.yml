@@ -1,4 +1,4 @@
-name: Build iOS lab binaries (arm64)
+name: Build iOS lab binaries (arm64e)
 
 on:
   workflow_dispatch:
@@ -15,12 +15,17 @@ on:
         description: "gestaltpatcher | iokit_spoof | both"
         required: false
         default: "both"
+      mach_arch:
+        description: "arm64e (mad/iokit) | arm64 (gestalt tool only)"
+        required: false
+        default: "arm64e"
   push:
     branches: [main, master]
     paths:
       - "poc.m"
       - "iokit_spoof.m"
       - ".github/workflows/build-ios-patcher.yml"
+      - "scripts/**"
   pull_request:
     branches: [main, master]
 
@@ -42,11 +47,13 @@ jobs:
         if: github.event.inputs.build_target != 'iokit_spoof'
         env:
           IOS_MIN: ${{ github.event.inputs.ios_min_version || '15.0' }}
+          MACH_ARCH: ${{ github.event.inputs.mach_arch || 'arm64e' }}
         run: |
           set -euo pipefail
           SDK="$(xcrun --sdk iphoneos --show-sdk-path)"
           xcrun clang \
-            -target "arm64-apple-ios${IOS_MIN}" \
+            -target "${MACH_ARCH}-apple-ios${IOS_MIN}" \
+            -arch "${MACH_ARCH}" \
             -isysroot "$SDK" \
             -mios-version-min="${IOS_MIN}" \
             -fobjc-arc \
@@ -56,15 +63,17 @@ jobs:
           file gestaltpatcher
           ls -la gestaltpatcher
 
-      - name: Compile libiokit_spoof.dylib (optional)
+      - name: Compile libiokit_spoof.dylib (arm64e)
         if: github.event.inputs.build_target != 'gestaltpatcher'
         env:
           IOS_MIN: ${{ github.event.inputs.ios_min_version || '15.0' }}
         run: |
           set -euo pipefail
           SDK="$(xcrun --sdk iphoneos --show-sdk-path)"
+          # mobileactivationd is arm64e (PAC) on A13+ — dylib must match
           xcrun clang \
-            -target "arm64-apple-ios${IOS_MIN}" \
+            -target "arm64e-apple-ios${IOS_MIN}" \
+            -arch arm64e \
             -isysroot "$SDK" \
             -mios-version-min="${IOS_MIN}" \
             -dynamiclib \
@@ -83,13 +92,13 @@ jobs:
       - name: Smoke test Mach-O
         run: |
           if [ -f gestaltpatcher ]; then file gestaltpatcher | grep -E 'Mach-O|arm64'; fi
-          if [ -f libiokit_spoof.dylib ]; then file libiokit_spoof.dylib | grep -E 'Mach-O|arm64|dynamically'; fi
+          if [ -f libiokit_spoof.dylib ]; then file libiokit_spoof.dylib | grep -E 'Mach-O|arm64e|dynamically'; fi
 
       - name: Upload gestaltpatcher
         if: github.event.inputs.build_target != 'iokit_spoof'
         uses: actions/upload-artifact@v4
         with:
-          name: gestaltpatcher-${{ github.event.inputs.lab_label || 'arm64' }}
+          name: gestaltpatcher-${{ github.event.inputs.lab_label || 'ios26.5-23F77-i12-1' }}
           path: gestaltpatcher
           if-no-files-found: error
           retention-days: 90
@@ -98,7 +107,7 @@ jobs:
         if: github.event.inputs.build_target != 'gestaltpatcher'
         uses: actions/upload-artifact@v4
         with:
-          name: libiokit_spoof-${{ github.event.inputs.lab_label || 'arm64' }}
+          name: libiokit_spoof-${{ github.event.inputs.lab_label || 'ios26.5-23F77-i12-1' }}-arm64e
           path: libiokit_spoof.dylib
           if-no-files-found: error
           retention-days: 90
@@ -106,10 +115,13 @@ jobs:
       - name: Write build info
         env:
           IOS_MIN: ${{ github.event.inputs.ios_min_version || '15.0' }}
+          MACH_ARCH: ${{ github.event.inputs.mach_arch || 'arm64e' }}
         run: |
           {
             echo "built_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
             echo "ios_min=${IOS_MIN}"
+            echo "mach_arch=${MACH_ARCH}"
+            echo "iokit_arch=arm64e"
             echo "lab_label=${{ github.event.inputs.lab_label || 'ios26.5-23F77-i12-1' }}"
             echo "build_target=${{ github.event.inputs.build_target || 'both' }}"
             echo "xcode=$(xcodebuild -version | head -1)"
@@ -121,6 +133,6 @@ jobs:
       - name: Upload build info
         uses: actions/upload-artifact@v4
         with:
-          name: build-info-${{ github.event.inputs.lab_label || 'arm64' }}
+          name: build-info-${{ github.event.inputs.lab_label || 'ios26.5-23F77-i12-1' }}
           path: build-info.txt
           retention-days: 90
