@@ -98,10 +98,14 @@ cp -f "`$PATCH" "`$SRC"
 chmod 644 "`$SRC"
 echo INSTALLED
 ls -la "`$SRC" "`$BAK" 2>/dev/null || true
-"@
+"@ -replace "`r`n", "`n"
+
+    $installSh = Join-Path $WorkDir "install_mad_launchd.sh"
+    [System.IO.File]::WriteAllText($installSh, $installScript, [Text.UTF8Encoding]::new($false))
 
     Write-Host "[install] patching launchd on device ..."
-    Invoke-Device $installScript | Out-Host
+    & $plink -batch -ssh -P $Port -l root -pw alpine -hostkey $hk -m $installSh 127.0.0.1
+    if ($LASTEXITCODE -ne 0) { throw "plink install script failed" }
 
     Write-Host ""
     if ($Restore) {
