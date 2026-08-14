@@ -1,5 +1,7 @@
 gestaltpatcher
 gestaltpatcher-*
+libiokit_spoof.dylib
+libiokit_spoof-*
 *.o
 *.dSYM/
 build-info.txt

@@ -1,4 +1,4 @@
-name: Build gestaltpatcher (iOS arm64)
+name: Build iOS lab binaries (arm64)
 
 on:
   workflow_dispatch:
@@ -8,13 +8,18 @@ on:
         required: false
         default: "15.0"
       lab_label:
-        description: "Optional label for artifact (e.g. ios26.1-23B85)"
+        description: "Artifact label (e.g. ios26.5-23F77-i12-1)"
         required: false
-        default: "ios26.1-23B85-iPhone12-5"
+        default: "ios26.5-23F77-i12-1"
+      build_target:
+        description: "gestaltpatcher | iokit_spoof | both"
+        required: false
+        default: "both"
   push:
     branches: [main, master]
     paths:
       - "poc.m"
+      - "iokit_spoof.m"
       - ".github/workflows/build-ios-patcher.yml"
   pull_request:
     branches: [main, master]
@@ -33,14 +38,13 @@ jobs:
           xcrun --sdk iphoneos --show-sdk-path
           xcrun --sdk iphoneos --show-sdk-version
 
-      - name: Compile gestaltpatcher (arm64 iOS)
+      - name: Compile gestaltpatcher (optional)
+        if: github.event.inputs.build_target != 'iokit_spoof'
         env:
           IOS_MIN: ${{ github.event.inputs.ios_min_version || '15.0' }}
         run: |
           set -euo pipefail
           SDK="$(xcrun --sdk iphoneos --show-sdk-path)"
-          echo "Using SDK: $SDK"
-          echo "IOS_MIN=$IOS_MIN"
           xcrun clang \
             -target "arm64-apple-ios${IOS_MIN}" \
             -isysroot "$SDK" \
@@ -52,11 +56,37 @@ jobs:
           file gestaltpatcher
           ls -la gestaltpatcher
 
-      - name: Smoke test (host cannot run iOS binary)
+      - name: Compile libiokit_spoof.dylib (optional)
+        if: github.event.inputs.build_target != 'gestaltpatcher'
+        env:
+          IOS_MIN: ${{ github.event.inputs.ios_min_version || '15.0' }}
         run: |
-          file gestaltpatcher | grep -E 'Mach-O|arm64'
+          set -euo pipefail
+          SDK="$(xcrun --sdk iphoneos --show-sdk-path)"
+          xcrun clang \
+            -target "arm64-apple-ios${IOS_MIN}" \
+            -isysroot "$SDK" \
+            -mios-version-min="${IOS_MIN}" \
+            -dynamiclib \
+            -fobjc-arc \
+            -O2 \
+            -install_name "@rpath/libiokit_spoof.dylib" \
+            -framework Foundation \
+            -framework IOKit \
+            -framework CoreFoundation \
+            -ldl \
+            -o libiokit_spoof.dylib \
+            iokit_spoof.m
+          file libiokit_spoof.dylib
+          ls -la libiokit_spoof.dylib
 
-      - name: Upload artifact
+      - name: Smoke test Mach-O
+        run: |
+          if [ -f gestaltpatcher ]; then file gestaltpatcher | grep -E 'Mach-O|arm64'; fi
+          if [ -f libiokit_spoof.dylib ]; then file libiokit_spoof.dylib | grep -E 'Mach-O|arm64|dynamically'; fi
+
+      - name: Upload gestaltpatcher
+        if: github.event.inputs.build_target != 'iokit_spoof'
         uses: actions/upload-artifact@v4
         with:
           name: gestaltpatcher-${{ github.event.inputs.lab_label || 'arm64' }}
@@ -64,15 +94,28 @@ jobs:
           if-no-files-found: error
           retention-days: 90
 
+      - name: Upload libiokit_spoof.dylib
+        if: github.event.inputs.build_target != 'gestaltpatcher'
+        uses: actions/upload-artifact@v4
+        with:
+          name: libiokit_spoof-${{ github.event.inputs.lab_label || 'arm64' }}
+          path: libiokit_spoof.dylib
+          if-no-files-found: error
+          retention-days: 90
+
       - name: Write build info
+        env:
+          IOS_MIN: ${{ github.event.inputs.ios_min_version || '15.0' }}
         run: |
           {
             echo "built_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-            echo "ios_min=${{ github.event.inputs.ios_min_version || '15.0' }}"
-            echo "lab_label=${{ github.event.inputs.lab_label || 'ios26.1-23B85-iPhone12-5' }}"
+            echo "ios_min=${IOS_MIN}"
+            echo "lab_label=${{ github.event.inputs.lab_label || 'ios26.5-23F77-i12-1' }}"
+            echo "build_target=${{ github.event.inputs.build_target || 'both' }}"
             echo "xcode=$(xcodebuild -version | head -1)"
             echo "sdk=$(xcrun --sdk iphoneos --show-sdk-version)"
-            echo "sha256=$(shasum -a 256 gestaltpatcher | awk '{print $1}')"
+            [ -f gestaltpatcher ] && echo "gestaltpatcher_sha256=$(shasum -a 256 gestaltpatcher | awk '{print $1}')"
+            [ -f libiokit_spoof.dylib ] && echo "iokit_spoof_sha256=$(shasum -a 256 libiokit_spoof.dylib | awk '{print $1}')"
           } > build-info.txt
 
       - name: Upload build info

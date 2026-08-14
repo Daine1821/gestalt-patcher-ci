@@ -1,71 +1,67 @@
 # gestalt-patcher-ci
 
-Build **GestaltHax v2** `gestaltpatcher` (arm64 iOS) via **GitHub Actions** on macOS.
+Build **iOS arm64 lab binaries** via **GitHub Actions** (macOS + Xcode).
 
-Based on [hanakim3945/gestalt_hax_v2](https://github.com/hanakim3945/gestalt_hax_v2) — educational / lab use.
-
-## Lab target (first test)
-
-| Device | Build | GestaltHax |
+| Artifact | Source | Lab use |
 |---|---|---|
-| iPhone 11 Pro Max (`iPhone12,5`) | **23B85** (iOS 26.1) | v2 |
+| `gestaltpatcher` | `poc.m` (GestaltHax v2) | Patch MobileGestalt plist on-device |
+| `libiokit_spoof.dylib` | `iokit_spoof.m` | Hook IOKit demotion keys (iOS 26.5+) |
 
-## One binary or many?
+Repo: https://github.com/Daine1821/gestalt-patcher-ci
 
-| Step | Per iOS version? |
+## iOS 26.5 lab (i11) — IOKit spoof
+
+Static trace: `mobileactivationd` reads demotion via `copyDeviceTreeInt:key:` under **`:/product`** (kebab keys), not gestalt CacheData.
+
+| Property | Spoof int (AP) |
 |---|---|
-| **Compile** `gestaltpatcher` arm64 | Usually **one binary** (`ios-min 15.0` is fine) |
-| **Discover offset** (`gestalt_key_offset`) | **Yes — run on each iOS build** on the real device |
-| **Patch plist** | Uses offset printed at runtime |
+| `certificate-production-status` | 0 |
+| `effective-production-status-ap` | 1 |
+| `certificate-security-mode` | 0 |
+| `effective-security-mode-sep` | 0 |
 
-The binary links against **`libMobileGestalt.dylib` on the iPhone** when it runs — not at compile time. CI only builds the Mach-O; **execute on the phone in ramdisk**.
+**Important:** dylib is Mach-O binary, not a script. Default lab = **upload only** to `/mnt2/tmp/`; plist `DYLD_INSERT_LIBRARIES` on `mobileactivationd` is unreliable on ramdisk (AMFI).
 
 ## GitHub Actions
 
-1. Push this repo to GitHub.
-2. **Actions → Build gestaltpatcher → Run workflow**
-   - `ios_min_version`: `15.0` (default OK for 26.1)
-   - `lab_label`: `ios26.1-23B85-iPhone12-5`
-3. Download artifact **`gestaltpatcher-ios26.1-23B85-iPhone12-5`**
+1. Push to `master` / `main` or **Actions → Run workflow**
+2. Inputs:
+   - `ios_min_version`: `15.0`
+   - `lab_label`: `ios26.5-23F77-i12-1`
+   - `build_target`: `iokit_spoof` | `gestaltpatcher` | `both`
+3. Download artifacts:
+   - `libiokit_spoof-ios26.5-23F77-i12-1`
+   - `gestaltpatcher-...` (if built)
 
-## Run on iPhone (ramdisk SSH)
+## Windows lab — upload dylib only
 
-```bash
-chmod +x gestaltpatcher
-cp /path/com.apple.MobileGestalt.plist /tmp/g.plist
-./gestaltpatcher /tmp/g.plist
+```powershell
+# Copy artifact to repo folder, then:
+.\scripts\upload_iokit_spoof.ps1 -Dylib .\libiokit_spoof.dylib
 ```
 
-Stdout shows:
+Copies to iPhone ramdisk: `/mnt2/tmp/libiokit_spoof.dylib` — **no plist patch**.
 
-- `gestalt_key_offset = 0x...`
-- `PATCH EffectiveSecurityModeAp @0x...`
-
-Then deploy patched plist (keep **CacheUUID** / **CacheVersion**), optional `uchg`, reboot.
-
-Windows helper (PuTTY):
+## GestaltHax v2 (Pro Max 26.1 path)
 
 ```powershell
 .\scripts\run_ramdisk_lab.ps1 -Binary .\gestaltpatcher
 ```
 
+Based on [hanakim3945/gestalt_hax_v2](https://github.com/hanakim3945/gestalt_hax_v2).
+
 ## Local Mac build
 
 ```bash
-./scripts/build_local.sh 15.0
+./scripts/build_local.sh 15.0 both
 ```
 
-## Python patch (Windows lab)
+## Push updates
 
-After you have `gestalt_key_offset` from device output:
-
-```powershell
-cd "E:\Laboratorio aladin\hello_manual_deploy"
-.\pull_gestalt.ps1
-py -3 patch_gestalt_hax_v2.py --key-offset 0xXX
+```bash
+git add iokit_spoof.m .github/workflows/build-ios-patcher.yml README.md scripts/
+git commit -m "Add libiokit_spoof.dylib CI build for iOS 26.5 demotion lab"
+git push origin master
 ```
 
-## References
-
-- [GestaltHax writeup](https://hanakim3945.github.io/posts/gestalthax/)
-- [gestalt_hax_v2](https://github.com/hanakim3945/gestalt_hax_v2)
+Then run workflow on GitHub.

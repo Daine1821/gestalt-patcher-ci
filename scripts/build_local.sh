@@ -1,16 +1,40 @@
 #!/usr/bin/env bash
-# Build on a Mac with Xcode installed.
+# Local Mac build: gestaltpatcher and/or libiokit_spoof.dylib
 set -euo pipefail
 IOS_MIN="${1:-15.0}"
+TARGET="${2:-both}"
 SDK="$(xcrun --sdk iphoneos --show-sdk-path)"
-echo "SDK=$SDK IOS_MIN=$IOS_MIN"
-xcrun clang \
-  -target "arm64-apple-ios${IOS_MIN}" \
-  -isysroot "$SDK" \
-  -mios-version-min="${IOS_MIN}" \
-  -fobjc-arc \
-  -framework Foundation \
-  -o gestaltpatcher \
-  poc.m
-file gestaltpatcher
-shasum -a 256 gestaltpatcher
+
+echo "SDK=$SDK IOS_MIN=$IOS_MIN TARGET=$TARGET"
+
+if [[ "$TARGET" == "gestaltpatcher" || "$TARGET" == "both" ]]; then
+  xcrun clang \
+    -target "arm64-apple-ios${IOS_MIN}" \
+    -isysroot "$SDK" \
+    -mios-version-min="${IOS_MIN}" \
+    -fobjc-arc \
+    -framework Foundation \
+    -o gestaltpatcher \
+    poc.m
+  file gestaltpatcher
+fi
+
+if [[ "$TARGET" == "iokit_spoof" || "$TARGET" == "both" ]]; then
+  xcrun clang \
+    -target "arm64-apple-ios${IOS_MIN}" \
+    -isysroot "$SDK" \
+    -mios-version-min="${IOS_MIN}" \
+    -dynamiclib \
+    -fobjc-arc \
+    -O2 \
+    -install_name "@rpath/libiokit_spoof.dylib" \
+    -framework Foundation \
+    -framework IOKit \
+    -framework CoreFoundation \
+    -ldl \
+    -o libiokit_spoof.dylib \
+    iokit_spoof.m
+  file libiokit_spoof.dylib
+fi
+
+echo "Done."
