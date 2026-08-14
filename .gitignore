@@ -1,0 +1,6 @@
+gestaltpatcher
+gestaltpatcher-*
+*.o
+*.dSYM/
+build-info.txt
+.DS_Store
