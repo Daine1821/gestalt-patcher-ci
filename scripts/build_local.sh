@@ -41,4 +41,20 @@ if [[ "$TARGET" == "iokit_spoof" || "$TARGET" == "both" ]]; then
   file libiokit_spoof.dylib
 fi
 
+if [[ "$TARGET" == "product_set" || "$TARGET" == "all" || "$TARGET" == "both" ]]; then
+  xcrun clang \
+    -target "arm64e-apple-ios${IOS_MIN}" \
+    -arch arm64e \
+    -isysroot "$SDK" \
+    -mios-version-min="${IOS_MIN}" \
+    -fobjc-arc \
+    -O2 \
+    -framework Foundation \
+    -framework IOKit \
+    -framework CoreFoundation \
+    -o product_set \
+    product_set.m
+  file product_set
+fi
+
 echo "Done."
