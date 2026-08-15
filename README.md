@@ -12,12 +12,14 @@ Repo: https://github.com/Daine1821/gestalt-patcher-ci
 
 ## product_set + ICH trustcache
 
-CI signs **`product_set` after compile** (same as local Mac):
+CI signs **`product_set` after compile** with bare adhoc (no entitlements):
 
 ```bash
-codesign -s - --force --timestamp=none --entitlements entitlements/product_set.plist product_set
+codesign -s - --force --timestamp=none product_set
 codesign -dv --verbose=4 product_set 2>&1 | grep CDHash
 ```
+
+Do **not** use `platform-application` entitlements — AMFI kills those on ramdisk even when CDHash is in trustcache.
 
 **Important:** add to `trustcache.img4` the CDHash of the **signed** binary from the artifact — not the unsigned build.
 
