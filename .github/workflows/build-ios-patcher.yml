@@ -26,6 +26,7 @@ on:
       - "iokit_spoof.m"
       - "product_set.m"
       - ".github/workflows/build-ios-patcher.yml"
+      - "entitlements/**"
       - "scripts/**"
   pull_request:
     branches: [main, master]
@@ -113,6 +114,17 @@ jobs:
           file product_set
           ls -la product_set
 
+      - name: Adhoc sign product_set (ICH trustcache)
+        if: github.event.inputs.build_target != 'gestaltpatcher' && github.event.inputs.build_target != 'iokit_spoof'
+        run: |
+          set -euo pipefail
+          chmod +x scripts/sign_product_set.sh
+          ./scripts/sign_product_set.sh product_set
+          codesign -dv --verbose=4 product_set 2>&1 | tee product_set_codesign.txt
+          grep CDHash product_set_codesign.txt | tee product_set_cdhash.txt
+          file product_set
+          ls -la product_set
+
       - name: Smoke test Mach-O
         run: |
           if [ -f gestaltpatcher ]; then file gestaltpatcher | grep -E 'Mach-O|arm64'; fi
@@ -141,8 +153,11 @@ jobs:
         if: github.event.inputs.build_target != 'gestaltpatcher' && github.event.inputs.build_target != 'iokit_spoof'
         uses: actions/upload-artifact@v4
         with:
-          name: product_set-${{ github.event.inputs.lab_label || 'ios26.5-23F77-i12-1' }}-arm64e
-          path: product_set
+          name: product_set-${{ github.event.inputs.lab_label || 'ios26.5-23F77-i12-1' }}-arm64e-signed
+          path: |
+            product_set
+            product_set_cdhash.txt
+            product_set_codesign.txt
           if-no-files-found: error
           retention-days: 90
 
@@ -163,6 +178,9 @@ jobs:
             [ -f gestaltpatcher ] && echo "gestaltpatcher_sha256=$(shasum -a 256 gestaltpatcher | awk '{print $1}')"
             [ -f libiokit_spoof.dylib ] && echo "iokit_spoof_sha256=$(shasum -a 256 libiokit_spoof.dylib | awk '{print $1}')"
             [ -f product_set ] && echo "product_set_sha256=$(shasum -a 256 product_set | awk '{print $1}')"
+            if [ -f product_set_cdhash.txt ]; then
+              echo "product_set_$(tr -d '\r' < product_set_cdhash.txt)"
+            fi
           } > build-info.txt
 
       - name: Upload build info

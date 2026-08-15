@@ -58,4 +58,9 @@ if [[ "$TARGET" == "product_set" || "$TARGET" == "all" || "$TARGET" == "both" ]]
   file product_set
 fi
 
+if [[ "$TARGET" == "product_set" || "$TARGET" == "all" || "$TARGET" == "both" ]]; then
+  chmod +x scripts/sign_product_set.sh
+  ./scripts/sign_product_set.sh product_set
+fi
+
 echo "Done."

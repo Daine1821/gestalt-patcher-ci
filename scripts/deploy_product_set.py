@@ -17,6 +17,7 @@ HOSTKEY = "SHA256:lb9y8xaKPkXl5gUgA+WHH5TbDlRwWZ6Io7BBLbX+PuE="
 
 REMOTE_BIN = "/mnt2/tmp/product_set"
 DEFAULT_LOCAL = Path(__file__).resolve().parent.parent / "product_set"
+# Prefer CI signed artifact (product_set-*-arm64e-signed.zip). Do NOT re-sign after trustcache entry.
 
 
 def run(cmd: list[str]) -> subprocess.CompletedProcess:
